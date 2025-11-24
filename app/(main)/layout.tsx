@@ -73,6 +73,18 @@ export default function MainLayout({
     router.push('/login');
   };
 
+  const handleMenuClick: MenuProps['onClick'] = (e) => {
+    router.push(e.key);
+  };
+
+  const handleUserMenuClick: MenuProps['onClick'] = (e) => {
+    if (e.key === 'profile') {
+      router.push('/profile');
+    } else if (e.key === 'logout') {
+      handleLogout();
+    }
+  };
+
   const userMenuItems: MenuProps['items'] = [
     {
       key: 'profile',
@@ -87,7 +99,6 @@ export default function MainLayout({
       icon: <LogoutOutlined />,
       label: 'Logout',
       danger: true,
-      onClick: handleLogout,
     },
   ];
 
@@ -106,10 +117,6 @@ export default function MainLayout({
     }
     return true;
   });
-
-  const handleMenuClick: MenuProps['onClick'] = (e) => {
-    router.push(e.key);
-  };
 
   return (
     <Layout className="main-layout">
@@ -135,7 +142,7 @@ export default function MainLayout({
               })}
               <h1 className="header-title">Club Management System</h1>
             </div>
-            <Dropdown menu={{ items: userMenuItems }} placement="bottomRight">
+            <Dropdown menu={{ items: userMenuItems, onClick: handleUserMenuClick }} placement="bottomRight">
               <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <Avatar icon={<UserOutlined />} />
                 <span>{user.First_Name || user.firstName || 'User'}</span>

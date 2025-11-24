@@ -1,10 +1,12 @@
 'use client';
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { Card, Row, Col, Statistic, Table, Tag } from 'antd';
-import { UserOutlined, CalendarOutlined, TeamOutlined, RiseOutlined } from '@ant-design/icons';
+import { Card, Row, Col, Statistic, Table, Tag, Spin, message } from 'antd';
+import { UserOutlined, CalendarOutlined, TeamOutlined, RiseOutlined, DollarOutlined, ClockCircleOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
+import api from '@/lib/api';
+import { DashboardStats } from '@/lib/types';
 
 interface RecentActivity {
   key: string;
@@ -14,8 +16,37 @@ interface RecentActivity {
   date: string;
 }
 
+interface DashboardData extends DashboardStats {
+  recentActivities: RecentActivity[];
+}
+
 export default function DashboardPage() {
   const router = useRouter();
+  const [loading, setLoading] = useState(true);
+  const [stats, setStats] = useState<DashboardData | null>(null);
+
+  const fetchDashboardStats = useCallback(async () => {
+    try {
+      setLoading(true);
+      const response = await api.get('/dashboard/stats');
+      if (response.data?.status === 'success' && response.data?.data) {
+        setStats(response.data.data);
+      } else {
+        message.error('Failed to load dashboard statistics');
+      }
+    } catch (error: any) {
+      console.error('Error fetching dashboard stats:', error);
+      const errorMessage = error.response?.data?.message || 'Failed to load dashboard statistics';
+      message.error(errorMessage);
+      
+      // If unauthorized, redirect
+      if (error.response?.status === 401 || error.response?.status === 403) {
+        router.push('/events');
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, [router]);
 
   useEffect(() => {
     // Check if user is admin
@@ -28,33 +59,12 @@ export default function DashboardPage() {
     if (userRole !== 'Admin') {
       // Redirect non-admin users to a page they can access
       router.push('/events');
+      return;
     }
-  }, [router]);
 
-  // Sample data - Until we can get fetch from API
-  const recentActivities: RecentActivity[] = [
-    {
-      key: '1',
-      activity: 'New member joined',
-      user: 'John Doe',
-      club: 'Chess Club',
-      date: '2025-11-14',
-    },
-    {
-      key: '2',
-      activity: 'Event created',
-      user: 'Jane Smith',
-      club: 'Robotics Club',
-      date: '2025-11-13',
-    },
-    {
-      key: '3',
-      activity: 'Event attendance recorded',
-      user: 'Michael Johnson',
-      club: 'Drama Society',
-      date: '2025-11-12',
-    },
-  ];
+    // Fetch dashboard statistics
+    fetchDashboardStats();
+  }, [router, fetchDashboardStats]);
 
   const columns: ColumnsType<RecentActivity> = [
     {
@@ -71,7 +81,7 @@ export default function DashboardPage() {
       title: 'Club',
       dataIndex: 'club',
       key: 'club',
-      render: (club: string) => <Tag color="blue">{club}</Tag>,
+      render: (club: string) => club ? <Tag color="blue">{club}</Tag> : '-',
     },
     {
       title: 'Date',
@@ -79,6 +89,25 @@ export default function DashboardPage() {
       key: 'date',
     },
   ];
+
+  if (loading) {
+    return (
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '400px' }}>
+        <Spin size="large" />
+      </div>
+    );
+  }
+
+  if (!stats) {
+    return (
+      <div>
+        <h1>Dashboard</h1>
+        <Card>
+          <p>No data available</p>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -89,7 +118,7 @@ export default function DashboardPage() {
           <Card>
             <Statistic
               title="Total Users"
-              value={15}
+              value={stats.totalUsers}
               prefix={<UserOutlined />}
               valueStyle={{ color: '#3f8600' }}
             />
@@ -99,7 +128,7 @@ export default function DashboardPage() {
           <Card>
             <Statistic
               title="Active Clubs"
-              value={10}
+              value={stats.activeClubs}
               prefix={<TeamOutlined />}
               valueStyle={{ color: '#1890ff' }}
             />
@@ -109,7 +138,7 @@ export default function DashboardPage() {
           <Card>
             <Statistic
               title="Total Events"
-              value={12}
+              value={stats.totalEvents}
               prefix={<CalendarOutlined />}
               valueStyle={{ color: '#cf1322' }}
             />
@@ -119,7 +148,7 @@ export default function DashboardPage() {
           <Card>
             <Statistic
               title="Total Members"
-              value={20}
+              value={stats.totalMembers}
               prefix={<RiseOutlined />}
               suffix="memberships"
               valueStyle={{ color: '#3f8600' }}
@@ -128,8 +157,58 @@ export default function DashboardPage() {
         </Col>
       </Row>
 
+      <Row gutter={16} style={{ marginTop: 16 }}>
+        <Col xs={24} sm={12} lg={6}>
+          <Card>
+            <Statistic
+              title="Pending Clubs"
+              value={stats.pendingClubs}
+              prefix={<ClockCircleOutlined />}
+              valueStyle={{ color: '#faad14' }}
+            />
+          </Card>
+        </Col>
+        <Col xs={24} sm={12} lg={6}>
+          <Card>
+            <Statistic
+              title="Upcoming Events"
+              value={stats.upcomingEvents}
+              prefix={<CalendarOutlined />}
+              valueStyle={{ color: '#722ed1' }}
+            />
+          </Card>
+        </Col>
+        <Col xs={24} sm={12} lg={6}>
+          <Card>
+            <Statistic
+              title="Budget Allocated"
+              value={stats.totalBudgetAllocated}
+              prefix={<DollarOutlined />}
+              precision={2}
+              valueStyle={{ color: '#13c2c2' }}
+            />
+          </Card>
+        </Col>
+        <Col xs={24} sm={12} lg={6}>
+          <Card>
+            <Statistic
+              title="Budget Spent"
+              value={stats.totalBudgetSpent}
+              prefix={<DollarOutlined />}
+              precision={2}
+              valueStyle={{ color: '#eb2f96' }}
+            />
+          </Card>
+        </Col>
+      </Row>
+
       <Card title="Recent Activities" style={{ marginTop: 24 }}>
-        <Table columns={columns} dataSource={recentActivities} pagination={false} />
+        <Table 
+          columns={columns} 
+          dataSource={stats.recentActivities || []} 
+          pagination={false}
+          loading={loading}
+        />
       </Card>
     </div>
   );
