@@ -8,7 +8,6 @@ export default function SettingsPage() {
   const [form] = Form.useForm();
 
   const onFinish = (values: any) => {
-    console.log('Settings saved:', values);
     message.success('Settings saved successfully');
   };
 

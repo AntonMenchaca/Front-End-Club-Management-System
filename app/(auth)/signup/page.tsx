@@ -105,11 +105,15 @@ export default function SignUpPage() {
             rules={[
               { required: true, message: 'Please input your email!' },
               { type: 'email', message: 'Please enter a valid email!' },
+              {
+                pattern: /@northeastern\.edu$/,
+                message: 'Please use a valid Northeastern.edu email address!',
+              },
             ]}
           >
             <Input
               prefix={<MailOutlined />}
-              placeholder="Email"
+              placeholder="Email (e.g., name@northeastern.edu)"
               autoComplete="email"
             />
           </Form.Item>

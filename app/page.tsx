@@ -9,7 +9,6 @@ export default function Home() {
   useEffect(() => {
     // Check if user is logged in
     const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
-    
     if (token) {
       // Check user role to redirect appropriately
       const user = typeof window !== 'undefined' 

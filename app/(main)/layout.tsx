@@ -111,7 +111,7 @@ export default function MainLayout({
 
   // Filter menu items - Dashboard only for Admin
   const filteredItems = items.filter(item => {
-    if (item.key === '/dashboard') {
+    if (item && item.key === '/dashboard') {
       return isAdmin;
     }
     return true;
