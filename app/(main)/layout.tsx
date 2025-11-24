@@ -14,6 +14,7 @@ import {
   UserOutlined,
   BankOutlined,
   DollarOutlined,
+  FileTextOutlined,
 } from '@ant-design/icons';
 import type { MenuProps } from 'antd';
 import './layout.css';
@@ -27,6 +28,11 @@ const items: MenuItem[] = [
     key: '/dashboard',
     icon: <DashboardOutlined />,
     label: 'Dashboard',
+  },
+  {
+    key: '/requests',
+    icon: <FileTextOutlined />,
+    label: 'Requests',
   },
   {
     key: '/members',
@@ -109,9 +115,9 @@ export default function MainLayout({
   const userRole = user.Role_Name || user.role;
   const isAdmin = userRole === 'Admin';
 
-  // Filter menu items - Dashboard only for Admin
+  // Filter menu items - Dashboard and Requests only for Admin
   const filteredItems = items.filter(item => {
-    if (item && item.key === '/dashboard') {
+    if (item && (item.key === '/dashboard' || item.key === '/requests')) {
       return isAdmin;
     }
     return true;

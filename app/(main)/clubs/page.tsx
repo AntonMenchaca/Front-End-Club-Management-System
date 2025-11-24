@@ -21,8 +21,7 @@ export default function DashboardPage() {
 
   useEffect(  () => {
     try {
-      const response = grabClubs( );
-      console.log('the clubs from the response are', response);
+      const response = grabClubs();
 
     } catch (err) {
       console.error('Error fetching clubs on dashboard load:', err);

@@ -65,7 +65,7 @@ export interface ClubMembership {
   Club_ID: number;
   Role: 'Club Leader' | 'Club Member';
   Date_Joined: string; // date
-  Status: 'Active' | 'Inactive';
+  Status: 'Active' | 'Inactive' | 'Pending';
   // Joined fields from Person
   First_Name?: string;
   Last_Name?: string;
@@ -73,6 +73,9 @@ export interface ClubMembership {
   Phone?: string | null;
   // Joined fields from Club
   Club_Name?: string;
+  // Additional fields
+  Department?: string | null;
+  Year?: number | null;
 }
 
 // Event types
