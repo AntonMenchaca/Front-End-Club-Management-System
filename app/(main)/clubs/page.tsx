@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { Card, Row, Col, Table, Tag, Button, Tabs, message, Space, Input, Popconfirm } from 'antd';
+import { Card, Row, Col, Table, Tag, Button, Tabs, message, Space, Input, Popconfirm, Modal, Form } from 'antd';
 import { 
   TeamOutlined, 
   CalendarOutlined, 
@@ -32,6 +32,8 @@ export default function ClubsPage() {
   const [user, setUser] = useState<any>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [activeTab, setActiveTab] = useState<string>('all-clubs');
+  const [isCreateClubModalOpen, setIsCreateClubModalOpen] = useState(false);
+  const [createClubForm] = Form.useForm();
 
   const fetchAllClubs = useCallback(async () => {
     try {
@@ -556,7 +558,7 @@ export default function ClubsPage() {
             </Row>
         
         <Row gutter={16}>
-          <Col xs={24} lg={12}>
+          <Col lg={24} xl={12}>
             <Card title={<><CalendarOutlined /> Upcoming Events</>}>
               {clubEvents.length === 0 ? (
                 <p style={{ color: '#999', textAlign: 'center', padding: '20px' }}>
@@ -573,7 +575,7 @@ export default function ClubsPage() {
               )}
             </Card>
           </Col>
-          <Col xs={24} lg={12}>
+          <Col lg={24} xl={12}>
             <Card title={<><UserOutlined /> Active Members</>}>
               <Table
                 columns={memberColumns}
@@ -805,23 +807,53 @@ export default function ClubsPage() {
   // Note: Tab switching is now handled directly in handleClubRowClick
   // This useEffect is removed to prevent auto-switching when pre-loading data
 
-  // Update active tab when user selects their own club
+  // Update active tab when user selects their own club (but don't auto-switch from Available Clubs tab)
   useEffect(() => {
-    if (!isAdmin && selectedClubId && userClubs.length > 0) {
+    // Only switch to a user club tab if a club is explicitly selected and we're not on the Available Clubs tab
+    if (!isAdmin && selectedClubId && userClubs.length > 0 && activeTab !== 'all-clubs') {
       setActiveTab(selectedClubId.toString());
-    } else if (!isAdmin && userClubs.length > 0 && activeTab === 'all-clubs') {
-      // Set first user club as active if no club is selected
-      const firstClubId = userClubs[0]?.Club_ID;
-      if (firstClubId) {
-        setSelectedClubId(firstClubId);
-        setActiveTab(firstClubId.toString());
-      }
     }
+    // Don't auto-switch away from "all-clubs" tab - let users stay on Available Clubs tab if they want
   }, [selectedClubId, isAdmin, userClubs, activeTab]);
+
+  const handleCreateClub = async (values: any) => {
+    try {
+      const response = await api.post('/clubs', {
+        clubName: values.clubName,
+        description: values.description || null,
+        status: 'Pending' // Always create with Pending status
+      });
+
+      if (response.data?.status === 'success') {
+        message.success('Club created successfully! It will be reviewed by an admin.');
+        setIsCreateClubModalOpen(false);
+        createClubForm.resetFields();
+        // Refresh clubs list
+        fetchAllClubs();
+        // If user, refresh their clubs too
+        if (user?.Person_ID) {
+          fetchUserClubs(user.Person_ID);
+          fetchUserMemberships(user.Person_ID);
+        }
+      }
+    } catch (error: any) {
+      console.error('Error creating club:', error);
+      message.error(error.response?.data?.message || 'Failed to create club');
+    }
+  };
 
   return (
     <div>
-      <h1>Clubs</h1>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+        <h1 style={{ margin: 0 }}>Clubs</h1>
+        <Button
+          type="primary"
+          icon={<PlusOutlined />}
+          onClick={() => setIsCreateClubModalOpen(true)}
+        >
+          Create Club
+        </Button>
+      </div>
       
       <Card>
         <Tabs
@@ -866,10 +898,55 @@ export default function ClubsPage() {
       {!isAdmin && userClubs.length === 0 && !loading && (
         <Card style={{ marginTop: 24 }}>
           <p style={{ textAlign: 'center', color: '#999', padding: '20px' }}>
-            You are not a member of any clubs yet. Request to join a club above!
+            You are not a member of any clubs yet. Request to join a club above or create your own!
           </p>
         </Card>
       )}
+
+      <Modal
+        title="Create New Club"
+        open={isCreateClubModalOpen}
+        onOk={() => createClubForm.submit()}
+        onCancel={() => {
+          setIsCreateClubModalOpen(false);
+          createClubForm.resetFields();
+        }}
+        okText="Create Club"
+        cancelText="Cancel"
+      >
+        <Form
+          form={createClubForm}
+          layout="vertical"
+          onFinish={handleCreateClub}
+        >
+          <Form.Item
+            name="clubName"
+            label="Club Name"
+            rules={[
+              { required: true, message: 'Please enter a club name' },
+              { min: 3, message: 'Club name must be at least 3 characters' }
+            ]}
+          >
+            <Input placeholder="Enter club name" />
+          </Form.Item>
+          <Form.Item
+            name="description"
+            label="Description"
+            rules={[{ max: 500, message: 'Description must be less than 500 characters' }]}
+          >
+            <Input.TextArea 
+              rows={4} 
+              placeholder="Enter club description (optional)" 
+              showCount
+              maxLength={500}
+            />
+          </Form.Item>
+          <p style={{ color: '#666', fontSize: '12px', marginTop: -8 }}>
+            Your club will be created with &quot;Pending&quot; status and will be reviewed by an admin. 
+            Once approved, you will automatically become the Club Leader.
+          </p>
+        </Form>
+      </Modal>
     </div>
   );
 }

@@ -7,7 +7,6 @@ import {
   DashboardOutlined,
   TeamOutlined,
   CalendarOutlined,
-  SettingOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
   LogoutOutlined,
@@ -35,11 +34,6 @@ const items: MenuItem[] = [
     label: 'Requests',
   },
   {
-    key: '/members',
-    icon: <TeamOutlined />,
-    label: 'Members',
-  },
-  {
     key: '/events',
     icon: <CalendarOutlined />,
     label: 'Events',
@@ -48,16 +42,6 @@ const items: MenuItem[] = [
     key: '/clubs',
     icon: <BankOutlined />,
     label: 'Clubs',
-  },
-  {
-    key: '/budget',
-    icon: <DollarOutlined />,
-    label: 'Budget',
-  },
-  {
-    key: '/settings',
-    icon: <SettingOutlined />,
-    label: 'Settings',
   },
 ];
 
@@ -115,9 +99,9 @@ export default function MainLayout({
   const userRole = user.Role_Name || user.role;
   const isAdmin = userRole === 'Admin';
 
-  // Filter menu items - Dashboard and Requests only for Admin
+  // Filter menu items - Dashboard only for Admin, Requests available to all users
   const filteredItems = items.filter(item => {
-    if (item && (item.key === '/dashboard' || item.key === '/requests')) {
+    if (item && item.key === '/dashboard') {
       return isAdmin;
     }
     return true;

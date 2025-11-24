@@ -124,6 +124,7 @@ export interface Expenditure {
   Request_Expense_Date: string; // date
   Status: 'Pending' | 'Approved' | 'Rejected';
   // Joined fields
+  Club_ID?: number;
   Club_Name?: string;
   Academic_Year?: string;
 }
