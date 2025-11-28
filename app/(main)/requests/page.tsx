@@ -550,6 +550,16 @@ export default function RequestsPage() {
     createExpenditureForm.setFieldsValue({ Budget_ID: undefined, amount: undefined });
     setSelectedBudget(null);
     
+    // Check if club is inactive
+    const allClubsList = isAdmin ? allClubs : leaderClubs;
+    const selectedClub = allClubsList.find(c => c.Club_ID === clubId);
+    if (selectedClub && selectedClub.STATUS === 'Inactive') {
+      message.error('Cannot create expenditures for inactive clubs');
+      setSelectedClubForExpenditure(undefined);
+      createExpenditureForm.setFieldsValue({ Club_ID: undefined });
+      return;
+    }
+    
     // Fetch budgets for this club
     try {
       const response = await api.get(`/budgets?clubId=${clubId}`);
@@ -750,11 +760,13 @@ export default function RequestsPage() {
               placeholder="Select a club"
               onChange={handleClubChangeForExpenditure}
             >
-              {(isAdmin ? allClubs : leaderClubs).map((club) => (
-                <Select.Option key={club.Club_ID} value={club.Club_ID}>
-                  {club.Club_Name}
-                </Select.Option>
-              ))}
+              {(isAdmin ? allClubs : leaderClubs)
+                .filter((club) => club.STATUS === 'Active') // Only show Active clubs
+                .map((club) => (
+                  <Select.Option key={club.Club_ID} value={club.Club_ID}>
+                    {club.Club_Name}
+                  </Select.Option>
+                ))}
             </Select>
           </Form.Item>
           

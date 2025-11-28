@@ -86,7 +86,7 @@ export default function EventsPage() {
             
             const leaderClubs = clubResponses
               .map((response: any) => response.data?.data)
-              .filter((club: any) => club != null);
+              .filter((club: any) => club != null && club.STATUS === 'Active'); // Only show Active clubs
             
             setClubs(leaderClubs);
             setCanCreateEvent(leaderClubs.length > 0);
@@ -202,6 +202,14 @@ export default function EventsPage() {
   const handleOk = async () => {
     try {
       const values = await form.validateFields();
+      
+      // Check if selected club is inactive
+      const selectedClub = clubs.find((c: any) => c.Club_ID === values.Club_ID);
+      if (selectedClub && selectedClub.STATUS === 'Inactive') {
+        message.error('Cannot create events for inactive clubs');
+        return;
+      }
+      
       const eventData = {
         clubId: values.Club_ID,
         eventName: values.Event_Name,

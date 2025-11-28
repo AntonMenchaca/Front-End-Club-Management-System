@@ -191,6 +191,13 @@ export default function ClubsPage() {
       return;
     }
 
+    // Check if club is inactive
+    const club = allClubs.find(c => c.Club_ID === clubId);
+    if (club && club.STATUS === 'Inactive') {
+      message.error('Cannot request to join an inactive club');
+      return;
+    }
+
     try {
       const response = await api.post('/memberships', {
         personId: user.Person_ID,
@@ -512,9 +519,30 @@ export default function ClubsPage() {
 
   const userClubTabs = userClubs.map(club => ({
     key: club.Club_ID.toString(),
-    label: club.Club_Name,
+    label: (
+      <span>
+        {club.Club_Name}
+        {club.STATUS === 'Inactive' && (
+          <Tag color="red" style={{ marginLeft: 8 }}>Inactive</Tag>
+        )}
+      </span>
+    ),
     children: (
       <div>
+            {club.STATUS === 'Inactive' && (
+              <div style={{ 
+                marginBottom: 16, 
+                padding: 12, 
+                backgroundColor: '#fff2e8', 
+                border: '1px solid #ffbb96',
+                borderRadius: 4
+              }}>
+                <Tag color="red" style={{ marginBottom: 8 }}>This club is Inactive</Tag>
+                <p style={{ margin: 0, color: '#666' }}>
+                  This club is currently inactive. Events and expenditures cannot be created for inactive clubs.
+                </p>
+              </div>
+            )}
             <Row gutter={16} style={{ marginBottom: 24 }}>
               <Col span={24}>
                 <Card>
@@ -635,9 +663,33 @@ export default function ClubsPage() {
       const isSelected = selectedClubForView?.Club_ID === club.Club_ID;
       allTabs.push({
         key: `club-${club.Club_ID}`,
-        label: club.Club_Name,
+        label: (
+          <span>
+            {club.Club_Name}
+            {club.STATUS === 'Inactive' && (
+              <Tag color="red" style={{ marginLeft: 8 }}>Inactive</Tag>
+            )}
+            {club.STATUS === 'Pending' && (
+              <Tag color="orange" style={{ marginLeft: 8 }}>Pending</Tag>
+            )}
+          </span>
+        ),
         children: (
           <div>
+            {club.STATUS === 'Inactive' && (
+              <div style={{ 
+                marginBottom: 16, 
+                padding: 12, 
+                backgroundColor: '#fff2e8', 
+                border: '1px solid #ffbb96',
+                borderRadius: 4
+              }}>
+                <Tag color="red" style={{ marginBottom: 8 }}>This club is Inactive</Tag>
+                <p style={{ margin: 0, color: '#666' }}>
+                  This club is currently inactive. Events and expenditures cannot be created for inactive clubs.
+                </p>
+              </div>
+            )}
             <Row gutter={16} style={{ marginBottom: 24 }}>
               <Col span={24}>
                 <Card
