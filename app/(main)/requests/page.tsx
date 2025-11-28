@@ -1,26 +1,29 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
-import { Tabs, Table, Button, Space, Tag, message, Popconfirm, Select, Row, Col } from 'antd';
-import { CheckOutlined, CloseOutlined, DollarOutlined, TeamOutlined, BankOutlined } from '@ant-design/icons';
+import React, { useState, useEffect } from 'react';
+import { Tabs, Table, Button, Space, Tag, message, Popconfirm, Select, Row, Col, Modal, Form, Input, InputNumber, DatePicker } from 'antd';
+import { CheckOutlined, CloseOutlined, DollarOutlined, TeamOutlined, BankOutlined, PlusOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import type { Expenditure, ClubMembership, Club } from '@/lib/types';
 import api from '@/lib/api';
 
 export default function RequestsPage() {
-  const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [expenditures, setExpenditures] = useState<Expenditure[]>([]);
   const [memberships, setMemberships] = useState<ClubMembership[]>([]);
   const [clubs, setClubs] = useState<Club[]>([]);
   const [allClubs, setAllClubs] = useState<Club[]>([]);
   const [activeTab, setActiveTab] = useState('expenditures');
-  const [user, setUser] = useState<any>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [isClubLeader, setIsClubLeader] = useState(false);
   const [expenditureClubFilter, setExpenditureClubFilter] = useState<number | undefined>(undefined);
   const [expenditureStatusFilter, setExpenditureStatusFilter] = useState<string>('Pending');
+  const [isCreateExpenditureModalOpen, setIsCreateExpenditureModalOpen] = useState(false);
+  const [createExpenditureForm] = Form.useForm();
+  const [leaderClubs, setLeaderClubs] = useState<Club[]>([]);
+  const [selectedClubForExpenditure, setSelectedClubForExpenditure] = useState<number | undefined>(undefined);
+  const [budgets, setBudgets] = useState<any[]>([]);
+  const [selectedBudget, setSelectedBudget] = useState<any | null>(null);
 
   useEffect(() => {
     // Get user info
@@ -28,7 +31,6 @@ export default function RequestsPage() {
       ? JSON.parse(localStorage.getItem('user') || '{}')
       : {};
     
-    setUser(userData);
     const userRole = userData.Role_Name || userData.role;
     setIsAdmin(userRole === 'Admin');
     
@@ -68,6 +70,25 @@ export default function RequestsPage() {
           m.Role === 'Club Leader' && m.Status === 'Active'
         );
         setIsClubLeader(hasLeaderRole);
+        
+        // If user is a club leader, fetch their clubs
+        if (hasLeaderRole) {
+          const leaderMemberships = memberships.filter((m: ClubMembership) => 
+            m.Role === 'Club Leader' && m.Status === 'Active'
+          );
+          
+          // Fetch club details for each club they lead
+          const clubPromises = leaderMemberships.map((m: ClubMembership) =>
+            api.get(`/clubs/${m.Club_ID}`)
+          );
+          
+          const clubResponses = await Promise.all(clubPromises);
+          const clubs = clubResponses
+            .filter(res => res.data?.status === 'success' && res.data?.data)
+            .map(res => res.data.data);
+          
+          setLeaderClubs(clubs);
+        }
       }
     } catch (error) {
       console.error('Error checking club leader status:', error);
@@ -511,16 +532,95 @@ export default function RequestsPage() {
     },
   ];
 
+  const handleCreateExpenditure = async () => {
+    setIsCreateExpenditureModalOpen(true);
+    createExpenditureForm.resetFields();
+    setSelectedClubForExpenditure(undefined);
+    setBudgets([]);
+    setSelectedBudget(null);
+    
+    // If admin and allClubs is empty, fetch all clubs
+    if (isAdmin && allClubs.length === 0) {
+      await fetchAllClubs();
+    }
+  };
+
+  const handleClubChangeForExpenditure = async (clubId: number) => {
+    setSelectedClubForExpenditure(clubId);
+    createExpenditureForm.setFieldsValue({ Budget_ID: undefined, amount: undefined });
+    setSelectedBudget(null);
+    
+    // Fetch budgets for this club
+    try {
+      const response = await api.get(`/budgets?clubId=${clubId}`);
+      if (response.data?.status === 'success') {
+        setBudgets(response.data.data || []);
+      }
+    } catch (error: any) {
+      console.error('Error fetching budgets:', error);
+      message.error('Failed to fetch budgets for this club');
+    }
+  };
+
+  const handleBudgetChangeForExpenditure = (budgetId: number) => {
+    const budget = budgets.find(b => b.Budget_ID === budgetId);
+    setSelectedBudget(budget || null);
+    createExpenditureForm.setFieldsValue({ amount: undefined }); // Reset amount when budget changes
+  };
+
+  const handleCreateExpenditureSubmit = async (values: any) => {
+    try {
+      // Validate amount doesn't exceed remaining balance
+      const remainingBalance = Number(selectedBudget?.Remaining || 0);
+      if (selectedBudget && values.amount > remainingBalance) {
+        message.error(`Amount cannot exceed the remaining budget balance of $${remainingBalance.toFixed(2)}`);
+        return;
+      }
+      
+      const expenditureData = {
+        expenseDescription: values.expenseDescription,
+        amount: values.amount,
+        requestExpenseDate: values.requestExpenseDate.format('YYYY-MM-DD'),
+        status: 'Pending' // Always Pending for Club Leaders
+      };
+      
+      await api.post(`/budgets/${values.Budget_ID}/expenditures`, expenditureData);
+      message.success('Expenditure request created successfully');
+      createExpenditureForm.resetFields();
+      setIsCreateExpenditureModalOpen(false);
+      setSelectedClubForExpenditure(undefined);
+      setBudgets([]);
+      setSelectedBudget(null);
+      fetchExpenditures(); // Refresh the list
+    } catch (error: any) {
+      console.error('Error creating expenditure request:', error);
+      message.error(error.response?.data?.message || 'Failed to create expenditure request');
+    }
+  };
+
   return (
     <div>
-      <h1>Requests Dashboard</h1>
-      <p style={{ color: '#666', marginBottom: 24 }}>
-        {isAdmin 
-          ? 'Review and manage all expenditure, membership, and club requests'
-          : isClubLeader
-          ? 'Review expenditure and membership requests for clubs you lead'
-          : 'View your requests'}
-      </p>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+        <div>
+          <h1 style={{ margin: 0 }}>Requests Dashboard</h1>
+          <p style={{ color: '#666', marginTop: 8, marginBottom: 0 }}>
+            {isAdmin 
+              ? 'Review and manage all expenditure, membership, and club requests'
+              : isClubLeader
+              ? 'Review expenditure and membership requests for clubs you lead'
+              : 'View your requests'}
+          </p>
+        </div>
+        {(isAdmin || isClubLeader) && (
+          <Button 
+            type="primary" 
+            icon={<PlusOutlined />} 
+            onClick={handleCreateExpenditure}
+          >
+            Create Expenditure Request
+          </Button>
+        )}
+      </div>
 
       <Tabs
         activeKey={activeTab}
@@ -620,6 +720,147 @@ export default function RequestsPage() {
           }] : []),
         ]}
       />
+
+      <Modal
+        title="Create Expenditure Request"
+        open={isCreateExpenditureModalOpen}
+        onOk={() => createExpenditureForm.submit()}
+        onCancel={() => {
+          setIsCreateExpenditureModalOpen(false);
+          createExpenditureForm.resetFields();
+          setSelectedClubForExpenditure(undefined);
+          setBudgets([]);
+          setSelectedBudget(null);
+        }}
+        okText="Create Request"
+        cancelText="Cancel"
+        width={600}
+      >
+        <Form
+          form={createExpenditureForm}
+          layout="vertical"
+          onFinish={handleCreateExpenditureSubmit}
+        >
+          <Form.Item
+            name="Club_ID"
+            label="Club"
+            rules={[{ required: true, message: 'Please select a club' }]}
+          >
+            <Select
+              placeholder="Select a club"
+              onChange={handleClubChangeForExpenditure}
+            >
+              {(isAdmin ? allClubs : leaderClubs).map((club) => (
+                <Select.Option key={club.Club_ID} value={club.Club_ID}>
+                  {club.Club_Name}
+                </Select.Option>
+              ))}
+            </Select>
+          </Form.Item>
+          
+          <Form.Item
+            name="Budget_ID"
+            label="Budget"
+            rules={[{ required: true, message: 'Please select a budget' }]}
+          >
+            <Select
+              placeholder={selectedClubForExpenditure ? "Select a budget" : "Select a club first"}
+              disabled={!selectedClubForExpenditure}
+              onChange={handleBudgetChangeForExpenditure}
+            >
+              {budgets.map((budget) => (
+                <Select.Option key={budget.Budget_ID} value={budget.Budget_ID}>
+                  {budget.Academic_Year} - ${Number(budget.Remaining || 0).toFixed(2)} remaining
+                </Select.Option>
+              ))}
+            </Select>
+          </Form.Item>
+
+          {selectedBudget && (
+            <div style={{ 
+              marginBottom: 16, 
+              padding: 16, 
+              backgroundColor: '#f0f2f5', 
+              borderRadius: 4,
+              border: '1px solid #d9d9d9'
+            }}>
+              <div style={{ marginBottom: 8, fontSize: '14px', fontWeight: 600 }}>
+                Budget Information
+              </div>
+              <div style={{ fontSize: '13px', color: '#666', lineHeight: '1.8' }}>
+                <div><strong>Academic Year:</strong> {selectedBudget.Academic_Year}</div>
+                <div><strong>Total Allocated:</strong> ${Number(selectedBudget.Total_Allocated || 0).toFixed(2)}</div>
+                <div><strong>Total Spent:</strong> ${Number(selectedBudget.Total_Spent || 0).toFixed(2)}</div>
+                <div style={{ 
+                  fontWeight: 600, 
+                  fontSize: '14px',
+                  color: Number(selectedBudget.Remaining || 0) > 0 ? '#52c41a' : '#ff4d4f', 
+                  marginTop: 8,
+                  paddingTop: 8,
+                  borderTop: '1px solid #d9d9d9'
+                }}>
+                  <strong>Remaining Balance:</strong> ${Number(selectedBudget.Remaining || 0).toFixed(2)}
+                </div>
+              </div>
+            </div>
+          )}
+
+          <Form.Item
+            name="expenseDescription"
+            label="Expense Description"
+            rules={[{ required: true, message: 'Please enter an expense description' }]}
+          >
+            <Input.TextArea 
+              rows={3} 
+              placeholder="Enter a description of the expense" 
+            />
+          </Form.Item>
+
+          <Form.Item
+            name="amount"
+            label="Amount"
+            rules={[
+              { required: true, message: 'Please enter an amount' },
+              { type: 'number', min: 0.01, message: 'Amount must be greater than 0' },
+              ({ getFieldValue }) => ({
+                validator(_, value) {
+                  if (!value || !selectedBudget) {
+                    return Promise.resolve();
+                  }
+                  const remainingBalance = Number(selectedBudget.Remaining || 0);
+                  if (value > remainingBalance) {
+                    return Promise.reject(
+                      new Error(`Amount cannot exceed remaining balance of $${remainingBalance.toFixed(2)}`)
+                    );
+                  }
+                  return Promise.resolve();
+                },
+              }),
+            ]}
+          >
+            <InputNumber
+              style={{ width: '100%' }}
+              prefix="$"
+              placeholder="0.00"
+              precision={2}
+              min={0.01}
+              max={selectedBudget ? Number(selectedBudget.Remaining || 0) : undefined}
+            />
+          </Form.Item>
+
+          <Form.Item
+            name="requestExpenseDate"
+            label="Request Expense Date"
+            rules={[{ required: true, message: 'Please select a date' }]}
+          >
+            <DatePicker style={{ width: '100%' }} />
+          </Form.Item>
+
+          <p style={{ color: '#666', fontSize: '12px', marginTop: -8 }}>
+            This expenditure request will be created with &quot;Pending&quot; status and will be reviewed by an admin.
+          </p>
+        </Form>
+      </Modal>
     </div>
   );
 }
