@@ -11,12 +11,12 @@ import {
   PlusOutlined,
   CheckOutlined,
   CloseOutlined,
-  DollarOutlined
+  DollarOutlined,
+  ReloadOutlined
 } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import type { Club, ClubMembership, Event } from '@/lib/types';
 import api from '@/lib/api';
-
 export default function ClubsPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
@@ -29,6 +29,7 @@ export default function ClubsPage() {
   const [clubEvents, setClubEvents] = useState<Event[]>([]);
   const [clubBudgetSummary, setClubBudgetSummary] = useState<any[]>([]);
   const [searchText, setSearchText] = useState('');
+  const [recalculatingBudget, setRecalculatingBudget] = useState(false);
   const [user, setUser] = useState<any>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [activeTab, setActiveTab] = useState<string>('all-clubs');
@@ -182,6 +183,23 @@ export default function ClubsPage() {
         message.error('Failed to fetch club budget summary');
       }
       setClubBudgetSummary([]);
+    }
+  };
+
+  const handleRecalculateBudgetTotals = async (clubId?: number) => {
+    try {
+      setRecalculatingBudget(true);
+      const response = await api.post('/budgets/recalculate/totals-spent');
+      const responseMessage = response.data?.message || 'Budget totals updated successfully';
+      message.success(responseMessage);
+      if (clubId) {
+        await fetchClubBudgetSummary(clubId);
+      }
+    } catch (error: any) {
+      console.error('Error recalculating budget totals:', error);
+      message.error(error.response?.data?.message || 'Failed to recalculate budget totals');
+    } finally {
+      setRecalculatingBudget(false);
     }
   };
 
@@ -556,6 +574,17 @@ export default function ClubsPage() {
                     {canViewBudget(club.Club_ID) && (
                       <Col xs={24} md={12}>
                         <div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                            <h4 style={{ margin: 0 }}><DollarOutlined /> Budget Summary</h4>
+                            <Button
+                              size="small"
+                              icon={<ReloadOutlined />}
+                              loading={recalculatingBudget}
+                              onClick={() => handleRecalculateBudgetTotals(club.Club_ID)}
+                            >
+                              Recalculate totals
+                            </Button>
+                          </div>
                           <h4><DollarOutlined /> Budget Summary</h4>
                           {clubBudgetSummary.length === 0 ? (
                             <p style={{ color: '#999' }}>No budget information available</p>
@@ -751,6 +780,18 @@ export default function ClubsPage() {
                     {canViewBudget(club.Club_ID) && (
                       <Col xs={24} md={12}>
                         <div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                            <h4 style={{ margin: 0 }}><DollarOutlined /> Budget Summary</h4>
+                            <Button
+                              size="small"
+                              icon={<ReloadOutlined />}
+                              loading={recalculatingBudget}
+                              disabled={!isSelected}
+                              onClick={() => handleRecalculateBudgetTotals(club.Club_ID)}
+                            >
+                              Recalculate totals
+                            </Button>
+                          </div>
                           <h4><DollarOutlined /> Budget Summary</h4>
                           {isSelected ? (
                             clubBudgetSummary.length === 0 ? (
