@@ -3,10 +3,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Card, Row, Col, Button, Tag, Modal, Form, Input, DatePicker, Select, message, Tabs, Spin, Descriptions, Table, Space } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
-import { PlusOutlined, CalendarOutlined, EnvironmentOutlined, TeamOutlined, UserOutlined, EditOutlined, UserAddOutlined } from '@ant-design/icons';
+import { PlusOutlined, CalendarOutlined, EnvironmentOutlined, TeamOutlined, UserOutlined, EditOutlined, UserAddOutlined, DownloadOutlined } from '@ant-design/icons';
 import type { Event } from '@/lib/types';
 import api from '@/lib/api';
 import dayjs from 'dayjs';
+import { exportAttendanceToCSV } from '@/lib/csvExport';
 
 const { TabPane } = Tabs;
 
@@ -148,6 +149,28 @@ export default function EventsPage() {
       (m: any) => m.Club_ID === event.Club_ID && m.Role === 'Club Leader' && m.Status === 'Active'
     );
     return !!membership;
+  };
+
+  // Check if user is admin
+  const isAdmin = () => {
+    const userRole = user?.Role_Name || user?.role;
+    return userRole === 'Admin';
+  };
+
+  // Handle CSV export
+  const handleExportAttendance = () => {
+    if (!selectedEvent || attendees.length === 0) {
+      message.warning('No attendance data to export');
+      return;
+    }
+    
+    try {
+      exportAttendanceToCSV(attendees, selectedEvent.Event_Name, selectedEvent.Event_Date);
+      message.success('Attendance list exported successfully');
+    } catch (error) {
+      console.error('Error exporting attendance:', error);
+      message.error('Failed to export attendance list');
+    }
   };
 
   const handleAddEvent = () => {
@@ -629,6 +652,15 @@ export default function EventsPage() {
                   <TeamOutlined style={{ marginRight: 8 }} />
                   Attendees ({attendees.length})
                 </h3>
+                {isAdmin() && attendees.length > 0 && (
+                  <Button
+                    type="primary"
+                    icon={<DownloadOutlined />}
+                    onClick={handleExportAttendance}
+                  >
+                    Export Attendance
+                  </Button>
+                )}
                 {selectedEvent && isEventToday(selectedEvent.Event_Date) && canAddAttendees(selectedEvent) && (
                   <div>
                     <Space direction="vertical" style={{ width: '100%' }} size="middle">
@@ -837,7 +869,7 @@ export default function EventsPage() {
                           record.Email.toLowerCase().includes((value as string).toLowerCase()),
                       },
                       {
-                        title: 'Check-In Time',
+                        title: 'Check in Time',
                         dataIndex: 'Check_In_Time',
                         key: 'checkInTime',
                         render: (time: string) => dayjs(time).format('MMM DD, YYYY h:mm A'),
