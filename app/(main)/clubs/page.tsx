@@ -17,6 +17,7 @@ import {
 import type { ColumnsType } from 'antd/es/table';
 import type { Club, ClubMembership, Event } from '@/lib/types';
 import api from '@/lib/api';
+import TabPane from 'antd/es/tabs/TabPane';
 export default function ClubsPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
@@ -32,9 +33,11 @@ export default function ClubsPage() {
   const [recalculatingBudget, setRecalculatingBudget] = useState(false);
   const [user, setUser] = useState<any>(null);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [isClubLeader, setIsClubLeader] = useState(false);
   const [activeTab, setActiveTab] = useState<string>('all-clubs');
   const [isCreateClubModalOpen, setIsCreateClubModalOpen] = useState(false);
   const [createClubForm] = Form.useForm();
+  const [refreshingClubs, setRefreshingClubs] = useState(false);
 
   const fetchAllClubs = useCallback(async () => {
     try {
@@ -66,11 +69,14 @@ export default function ClubsPage() {
     }
   }, []);
 
-  const fetchUserMemberships = useCallback(async (userId: number) => {
+  // Fetches the current users membership
+  const fetchUserMembership = useCallback(async (userId: number) => {
     try {
-      const response = await api.get(`/memberships?personId=${userId}&status=Active`);
+      const response = await api.get(`/memberships?personId=${userId}`);
       if (response.data?.status === 'success') {
         setUserMemberships(response.data.data || []);
+        const isClubLeader = response.data.data[0].Role === 'Club Leader';
+        setIsClubLeader(isClubLeader);
       }
     } catch (error: any) {
       console.error('Error fetching user memberships:', error);
@@ -95,15 +101,15 @@ export default function ClubsPage() {
     const userRole = userData.Role_Name || userData.role;
     const adminStatus = userRole === 'Admin';
     setIsAdmin(adminStatus);
-    
+   
     if (userData.Person_ID) {
       fetchUserClubs(userData.Person_ID);
-      fetchUserMemberships(userData.Person_ID);
+      fetchUserMembership(userData.Person_ID);
     }
     
     // Fetch clubs after setting admin status
     fetchAllClubs();
-  }, [fetchUserClubs, fetchUserMemberships, fetchAllClubs]);
+  }, [fetchUserClubs, fetchUserMembership, fetchAllClubs]);
 
   useEffect(() => {
     if (selectedClubId && userClubs.some(c => c.Club_ID === selectedClubId)) {
@@ -118,7 +124,7 @@ export default function ClubsPage() {
 
   // Fetch members and events when admin selects a club for viewing
   useEffect(() => {
-    if (selectedClubForView && isAdmin) {
+    if (selectedClubForView && (isAdmin || isClubLeader)) {
       fetchClubMembers(selectedClubForView.Club_ID);
       fetchClubEvents(selectedClubForView.Club_ID);
       // Admin can always view budget
@@ -126,15 +132,25 @@ export default function ClubsPage() {
     }
   }, [selectedClubForView, isAdmin]);
 
+  useEffect(() => {
+    if (selectedClubForView) {
+      fetchClubMembers(selectedClubForView.Club_ID);
+      fetchClubEvents(selectedClubForView.Club_ID);
+      fetchClubBudgetSummary(selectedClubForView.Club_ID);
+    }
+    setRefreshingClubs(false);
+  }, [refreshingClubs]);
+
   const fetchClubMembers = async (clubId: number) => {
     try {
       const response = await api.get(`/clubs/${clubId}/members`);
       if (response.data?.status === 'success') {
         // Filter to show only active members
-        const activeMembers = (response.data.data || []).filter(
-          (member: any) => member.Status === 'Active'
-        );
-        setClubMembers(activeMembers);
+        const allMembers = (response.data.data || [])
+         
+   
+    
+        setClubMembers(allMembers);
       }
     } catch (error: any) {
       console.error('Error fetching club members:', error);
@@ -227,7 +243,7 @@ export default function ClubsPage() {
       if (response.data?.status === 'success') {
         message.success('Membership request submitted successfully!');
         // Refresh user memberships to show pending request
-        fetchUserMemberships(user.Person_ID);
+        fetchUserMembership(user.Person_ID);
         // Refresh all clubs to update button state
         fetchAllClubs();
       }
@@ -278,6 +294,35 @@ export default function ClubsPage() {
       fetchClubEvents(club.Club_ID);
       // Admin can always view budget
       fetchClubBudgetSummary(club.Club_ID);
+    }
+  };
+  const handleMembershipStatusChange = async (membershipId: number, newStatus: 'Active' | 'Inactive', clubId: number) => {
+    try {
+      const response = await api.put(`/memberships/${membershipId}`, {
+        status: newStatus
+      });
+
+      if (response.data?.status === 'success') {
+        const statusMessages = {
+          'Active': 'Membership activated successfully!',
+          'Inactive': 'Membership deactivated successfully!'
+        };
+        message.success(statusMessages[newStatus]);
+        
+        // Refresh the club members list to show updated status
+        await fetchClubMembers(clubId);
+        
+        // Also refresh all clubs to update member counts
+        await fetchAllClubs();
+        
+        // If user is viewing their own clubs, refresh their club list
+        if (user?.Person_ID) {
+          await fetchUserClubs(user.Person_ID);
+        }
+      }
+    } catch (error: any) {
+      console.error('Error changing membership status:', error);
+      message.error(error.response?.data?.message || 'Failed to change membership status');
     }
   };
 
@@ -485,6 +530,44 @@ export default function ClubsPage() {
       ),
     },
     {
+      title: 'Status',
+      dataIndex: 'Status',
+      key: 'Status',
+      render: (_, record) => {
+        let color = 'default';
+        if (record.Status === 'Active') color = 'green';
+        else if (record.Status === 'Inactive') color = 'red';
+        else if (record.Status === 'Pending') color = 'orange';
+        
+        // Check if user can change status (Admin or Club Leader)
+        const canChangeStatus = isAdmin || isClubLeader;
+        
+        if (!canChangeStatus) {
+          return <Tag color={color}>{record.Status}</Tag>;
+        }
+        
+        return (
+          <Popconfirm 
+          disabled={record.Role === 'Club Leader' && !isAdmin}
+            onConfirm={() => {
+              const newStatus = record.Status === 'Active' ? 'Inactive' : 'Active';
+              handleMembershipStatusChange(record.Membership_ID, newStatus, record.Club_ID);
+            }}
+            title="Are you sure you want to change the status of this membership?" 
+            okText="Yes" 
+            cancelText="No"
+          >
+            <Tag 
+              style={{ cursor: (isAdmin || isClubLeader) && (record.Role !== 'Club Leader' && !isAdmin) ? 'pointer' : 'default' }}
+              color={color}
+            >
+              {record.Status}
+            </Tag>
+          </Popconfirm>
+        );
+      },
+    },
+    {
       title: 'Department',
       dataIndex: 'Department',
       key: 'Department',
@@ -569,7 +652,7 @@ export default function ClubsPage() {
                     <Col xs={24} md={12}>
                       <p><strong>Description:</strong> {club.Description || 'No description available'}</p>
                       <p><strong>Established:</strong> {new Date(club.Date_Established).toLocaleDateString()}</p>
-                      <p><strong>Members:</strong> {club.Member_Count || 0}</p>
+                      <p><strong>Active Members:</strong> {club.Member_Count || 0}</p>
                     </Col>
                     {canViewBudget(club.Club_ID) && (
                       <Col xs={24} md={12}>
@@ -615,7 +698,51 @@ export default function ClubsPage() {
             </Row>
         
         <Row gutter={16}>
-          <Col lg={24} xl={12}>
+         
+          <Col  xl={24}>
+            <Card title={<><UserOutlined />Members</>}>
+              <Tabs>
+                <TabPane tab="All Members" key="all-members">
+                  <Table
+                    columns={memberColumns}
+                    dataSource={[...clubMembers]}
+                    rowKey="Membership_ID"
+                    pagination={{ pageSize: 5 }}
+                    size="small"
+                  />
+                </TabPane>
+  <TabPane tab="Active Members" key="active-members">
+                  <Table
+                    columns={memberColumns}
+                    dataSource={[...clubMembers].filter(member => member.Status === 'Active')}
+                    rowKey="Membership_ID"
+                    pagination={{ pageSize: 5 }}
+                    size="small"
+                  />
+                </TabPane>
+                  <TabPane tab="Inactive Members" key="inactive-members">
+                  <Table
+                    columns={memberColumns}
+                    dataSource={[...clubMembers].filter(member => member.Status === 'Inactive')}
+                    rowKey="Membership_ID"
+                    pagination={{ pageSize: 5 }}
+                    size="small"
+                  />
+                </TabPane>
+                 <TabPane tab="Pending Members" key="pending-members">
+                  <Table
+                    columns={memberColumns}
+                    dataSource={[...clubMembers].filter(member => member.Status === 'Pending')}
+                    rowKey="Membership_ID"
+                    pagination={{ pageSize: 5 }}
+                    size="small"
+                  />
+                </TabPane>
+              </Tabs>
+            
+            </Card>
+          </Col>
+           <Col xl={24}>
             <Card title={<><CalendarOutlined /> Upcoming Events</>}>
               {clubEvents.length === 0 ? (
                 <p style={{ color: '#999', textAlign: 'center', padding: '20px' }}>
@@ -630,17 +757,6 @@ export default function ClubsPage() {
                   size="small"
                 />
               )}
-            </Card>
-          </Col>
-          <Col lg={24} xl={12}>
-            <Card title={<><UserOutlined /> Active Members</>}>
-              <Table
-                columns={memberColumns}
-                dataSource={clubMembers}
-                rowKey="Membership_ID"
-                pagination={{ pageSize: 5 }}
-                size="small"
-              />
             </Card>
           </Col>
         </Row>
@@ -826,7 +942,7 @@ export default function ClubsPage() {
             </Row>
             
             <Row gutter={16} style={{ marginBottom: 16 }}>
-              <Col xs={24} lg={12}>
+              <Col xl={24}>
                 <Card title={<><CalendarOutlined /> Upcoming Events</>}>
                   {isSelected ? (
                     clubEvents.length === 0 ? (
@@ -849,12 +965,29 @@ export default function ClubsPage() {
                   )}
                 </Card>
               </Col>
-              <Col xs={24} lg={12}>
-                <Card title={<><UserOutlined /> Active Members</>}>
-                  {isSelected ? (
+              <Col  xl={24}>
+                <Card title={<><UserOutlined /> Members</>}>
+                <Tabs>
+                  <TabPane tab="All Members" key="all-members">
+    {isSelected ? (
+      <Table
+        columns={memberColumns}
+        dataSource={[...clubMembers]}
+        rowKey="Membership_ID"
+        pagination={{ pageSize: 5 }}
+        size="small"
+      />
+    ) : (
+      <p style={{ color: '#999', textAlign: 'center', padding: '20px' }}>
+        Click on this tab to view members
+      </p>
+    )}       
+  </TabPane>
+  <TabPane tab="Active Members" key="active-members">
+             {isSelected ? (
                     <Table
                       columns={memberColumns}
-                      dataSource={clubMembers}
+                      dataSource={[...clubMembers].filter(member => member.Status === 'Active')}
                       rowKey="Membership_ID"
                       pagination={{ pageSize: 5 }}
                       size="small"
@@ -863,7 +996,41 @@ export default function ClubsPage() {
                     <p style={{ color: '#999', textAlign: 'center', padding: '20px' }}>
                       Click on this tab to view members
                     </p>
-                  )}
+                  )}       
+                </TabPane>
+  <TabPane tab="Inactive Members" key="inactive-members">
+    {isSelected ? (
+      <Table
+        columns={memberColumns}
+        dataSource={[...clubMembers].filter(member => member.Status === 'Inactive')}
+        rowKey="Membership_ID"
+        pagination={{ pageSize: 5 }}
+        size="small"
+      />
+    ) : (
+      <p style={{ color: '#999', textAlign: 'center', padding: '20px' }}>
+        Click on this tab to view members
+      </p>
+    )}       
+  </TabPane>
+  <TabPane tab="Pending Members" key="pending-members">
+    {isSelected ? (
+      <Table
+        columns={memberColumns}
+        dataSource={[...clubMembers].filter(member => member.Status === 'Pending')}
+        rowKey="Membership_ID"
+        pagination={{ pageSize: 5 }}
+        size="small"
+      />
+    ) : (
+      <p style={{ color: '#999', textAlign: 'center', padding: '20px' }}>
+        Click on this tab to view members
+      </p>
+    )}       
+  </TabPane>
+                </Tabs>
+              
+                
                 </Card>
               </Col>
             </Row>
@@ -926,7 +1093,7 @@ export default function ClubsPage() {
         // If user, refresh their clubs too
         if (user?.Person_ID) {
           fetchUserClubs(user.Person_ID);
-          fetchUserMemberships(user.Person_ID);
+          fetchUserMembership(user.Person_ID);
         }
       }
     } catch (error: any) {

@@ -86,7 +86,6 @@ export default function RequestsPage() {
           const clubs = clubResponses
             .filter(res => res.data?.status === 'success' && res.data?.data)
             .map(res => res.data.data);
-          
           setLeaderClubs(clubs);
         }
       }
