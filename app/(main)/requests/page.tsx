@@ -691,24 +691,7 @@ export default function RequestsPage() {
               </div>
             ),
           },
-          {
-            key: 'memberships',
-            label: (
-              <span>
-                <TeamOutlined /> Membership Requests ({memberships.length})
-              </span>
-            ),
-            children: (
-              <Table
-                style={{ width: '100%' }}
-                columns={membershipColumns}
-                dataSource={memberships}
-                rowKey="Membership_ID"
-                loading={loading}
-                pagination={{ pageSize: 10 }}
-              />
-            ),
-          },
+         
           ...(isAdmin ? [{
             key: 'clubs',
             label: (
@@ -726,7 +709,24 @@ export default function RequestsPage() {
                 pagination={{ pageSize: 10 }}
               />
             ),
-          }] : []),
+          },  {
+            key: 'memberships',
+            label: (
+              <span>
+                <TeamOutlined /> Membership Requests ({memberships.length})
+              </span>
+            ),
+            children: (
+              <Table
+                style={{ width: '100%' }}
+                columns={membershipColumns}
+                dataSource={memberships}
+                rowKey="Membership_ID"
+                loading={loading}
+                pagination={{ pageSize: 10 }}
+              />
+            ),
+          },] : []),
         ]}
       />
 
